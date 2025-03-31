@@ -4,14 +4,16 @@ from tkinter import Tk, Label, Entry, Button, messagebox
 from fpdf import FPDF
 from datetime import datetime
 
-# Definir caminho do diretório atual
-dir_path = os.path.dirname(os.path.abspath(__file__))
+# Função para converter valores numéricos em texto por extenso
+def numero_por_extenso(valor):
+    from num2words import num2words
+    return num2words(valor, lang='pt_BR')
 
-# Criar banco de dados no diretório atual
-db_path = os.path.join(dir_path, "imobiliaria.db")
-conn = sqlite3.connect(db_path)
+# Criar banco de dados
+conn = sqlite3.connect("imobiliaria.db")
 c = conn.cursor()
 
+# Criar tabelas caso não existam
 c.execute('''CREATE TABLE IF NOT EXISTS inquilinos (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 nome TEXT NOT NULL,
@@ -27,15 +29,17 @@ c.execute('''CREATE TABLE IF NOT EXISTS recibos (
                 condominio REAL NOT NULL,
                 agua REAL NOT NULL,
                 iptu REAL NOT NULL,
+                multa REAL NOT NULL,
+                juros REAL NOT NULL,
                 total REAL NOT NULL,
+                total_extenso TEXT NOT NULL,
                 data_emissao TEXT NOT NULL
             )''')
 conn.commit()
 
 # Criar pasta para armazenar recibos
-recibo_dir = os.path.join(dir_path, "recibos")
-if not os.path.exists(recibo_dir):
-    os.makedirs(recibo_dir)
+if not os.path.exists("recibos"):
+    os.makedirs("recibos")
 
 # Função para cadastrar inquilino
 def cadastrar_inquilino():
@@ -62,11 +66,12 @@ def gerar_recibo():
     multa = aluguel * 0.10  # 10% de multa se houver atraso
     juros = aluguel * 0.01  # 1% de juros ao mês
     total = aluguel + condominio + agua + iptu + multa + juros
+    total_extenso = numero_por_extenso(total)
     data_emissao = datetime.now().strftime("%d-%m-%Y %H:%M:%S")
     
     # Salvar no banco de dados
-    c.execute("INSERT INTO recibos (nome, imovel, aluguel, condominio, agua, iptu, total, data_emissao) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-              (nome, imovel, aluguel, condominio, agua, iptu, total, data_emissao))
+    c.execute("INSERT INTO recibos (nome, imovel, aluguel, condominio, agua, iptu, multa, juros, total, total_extenso, data_emissao) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+              (nome, imovel, aluguel, condominio, agua, iptu, multa, juros, total, total_extenso, data_emissao))
     conn.commit()
     
     # Gerar PDF
@@ -84,11 +89,11 @@ def gerar_recibo():
     pdf.cell(200, 10, text=f"Multa: R$ {multa:.2f}", new_x="LMARGIN", new_y="NEXT")
     pdf.cell(200, 10, text=f"Juros: R$ {juros:.2f}", new_x="LMARGIN", new_y="NEXT")
     pdf.cell(200, 10, text=f"Total: R$ {total:.2f}", new_x="LMARGIN", new_y="NEXT")
+    pdf.cell(200, 10, text=f"Total por extenso: {total_extenso}", new_x="LMARGIN", new_y="NEXT")
     pdf.cell(200, 10, text=f"Data de Emissão: {data_emissao}", new_x="LMARGIN", new_y="NEXT")
     
-    # Definir nome do arquivo com data e hora
-    data_hora = datetime.now().strftime("%d-%m-%Y_%H-%M-%S")
-    nome_arquivo = os.path.join(recibo_dir, f"recibo_{nome}_{data_hora}.pdf")
+    # Definir nome do arquivo
+    nome_arquivo = f"recibos/recibo_{nome}_{data_emissao.replace(':', '-').replace(' ', '_')}.pdf"
     pdf.output(nome_arquivo)
     
     messagebox.showinfo("Sucesso", f"Recibo gerado! Arquivo salvo em {nome_arquivo}")
