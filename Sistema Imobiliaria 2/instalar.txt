@@ -1,0 +1,21 @@
+pip install fpdf2
+
+pip3 install fpdf2
+
+pip show fpdf2
+
+pip install num2words
+
+
+
+
+
+
+imobiliaria_db.py (Gerenciamento do Banco de Dados)
+
+imobiliaria_ui.py (Interface Gráfica)
+
+imobiliaria_pdf.py (Geração de Recibos em PDF)
+
+Para executar o sistema, execute o arquivo imobiliaria_ui.py
+
