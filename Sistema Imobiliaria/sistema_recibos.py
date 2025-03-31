@@ -33,7 +33,8 @@ try:
                         comissao REAL DEFAULT 0.07,
                         data_inicio_contrato TEXT,
                         data_fim_contrato TEXT,
-                        transferiu_luz INTEGER DEFAULT 0
+                        transferiu_luz INTEGER DEFAULT 0,
+                        data_entrega_chaves TEXT
                     )''')  # Cria a tabela de inquilinos
     c.execute('''CREATE TABLE IF NOT EXISTS recibos (
                         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -56,7 +57,10 @@ try:
                         dias_atraso INTEGER NOT NULL,
                         mes_referencia INTEGER NOT NULL,
                         ano_referencia INTEGER NOT NULL,
-                        data_vencimento TEXT NOT NULL
+                        data_vencimento TEXT NOT NULL,
+                        parcela_iptu TEXT,
+                        parcela_seguro TEXT,
+                        parcela_taxa_incendio TEXT
                     )''')  # Cria a tabela de recibos
     c.execute('''CREATE TABLE IF NOT EXISTS prestacao_contas (
                         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -84,10 +88,11 @@ def cadastrar_inquilino():
     data_inicio_contrato = entry_data_inicio_contrato.get()  # Obtém a data de início do contrato
     data_fim_contrato = entry_data_fim_contrato.get()  # Obtém a data de fim do contrato
     transferiu_luz = var_transferiu_luz.get()  # Obtém o valor do checkbox de transferência de luz
+    data_entrega_chaves = entry_data_entrega_chaves.get()  # Obtém a data de entrega das chaves
 
     if nome and imovel and proprietario:  # Se todos os campos obrigatórios estiverem preenchidos
-        c.execute("INSERT INTO inquilinos (nome, cpf, imovel, proprietario, comissao, data_inicio_contrato, data_fim_contrato, transferiu_luz) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-                  (nome, cpf, imovel, proprietario, comissao, data_inicio_contrato, data_fim_contrato, transferiu_luz))  # Insere o inquilino no banco de dados
+        c.execute("INSERT INTO inquilinos (nome, cpf, imovel, proprietario, comissao, data_inicio_contrato, data_fim_contrato, transferiu_luz, data_entrega_chaves) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                  (nome, cpf, imovel, proprietario, comissao, data_inicio_contrato, data_fim_contrato, transferiu_luz, data_entrega_chaves))  # Insere o inquilino no banco de dados
         conn.commit()  # Salva as alterações no banco de dados
         messagebox.showinfo("Sucesso", "Inquilino cadastrado com sucesso!")  # Exibe mensagem de sucesso
     else:  # Se algum campo obrigatório estiver vazio
@@ -112,6 +117,9 @@ def gerar_recibo():
         return
     ano_referencia = int(entry_ano_referencia.get())  # Obtém o ano de referência
     data_vencimento_str = entry_data_vencimento.get()  # Obtém a data de vencimento
+    parcela_iptu = entry_parcela_iptu.get()  # Obtém a parcela do IPTU
+    parcela_seguro = entry_parcela_seguro.get()  # Obtém a parcela do seguro
+    parcela_taxa_incendio = entry_parcela_taxa_incendio.get()  # Obtém a parcela da taxa de incêndio
 
     # Calcular dias de atraso
     try:
@@ -137,7 +145,7 @@ def gerar_recibo():
     data_emissao = datetime.now().strftime("%d-%m-%Y %H:%M:%S")  # Obtém a data e hora de emissão do recibo
 
     # Obter dados do inquilino
-    c.execute('''SELECT data_inicio_contrato, data_fim_contrato, transferiu_luz
+    c.execute('''SELECT data_inicio_contrato, data_fim_contrato, transferiu_luz, data_entrega_chaves
                     FROM inquilinos
                     WHERE nome = ?''', (nome,))  # Busca os dados do inquilino no banco de dados
     inquilino_info = c.fetchone()  # Obtém os dados do inquilino
@@ -145,21 +153,23 @@ def gerar_recibo():
         data_inicio_contrato = inquilino_info[0]  # Obtém a data de início do contrato
         data_fim_contrato = inquilino_info[1]  # Obtém a data de fim do contrato
         transferiu_luz = inquilino_info[2]  # Obtém o valor do checkbox de transferência de luz
+        data_entrega_chaves = inquilino_info[3]  # Obtém a data de entrega das chaves
     else:
         data_inicio_contrato = "N/A"  # Se não encontrar o inquilino, define como "N/A"
         data_fim_contrato = "N/A"  # Se não encontrar o inquilino, define como "N/A"
         transferiu_luz = 0  # Se não encontrar o inquilino, define como 0
+        data_entrega_chaves = "N/A"  # Se não encontrar o inquilino, define como "N/A"
 
-    # Calcular próxima atualização do aluguel (exemplo: 12 meses após o início)
-    if data_inicio_contrato != "N/A":  # Se houver data de início do contrato
-        data_inicio = datetime.strptime(data_inicio_contrato, "%d/%m/%Y")  # Converte a data de início para objeto datetime
-        proxima_atualizacao_aluguel = (data_inicio.replace(year=data_inicio.year + 1)).strftime("%d/%m/%Y")  # Calcula a próxima atualização (1 ano após o início)
+    # Calcular próxima atualização do aluguel (exemplo: 12 meses após a entrega das chaves)
+    if data_entrega_chaves != "N/A":  # Se houver data de entrega das chaves
+        data_entrega = datetime.strptime(data_entrega_chaves, "%d/%m/%Y")  # Converte a data de entrega para objeto datetime
+        proxima_atualizacao_aluguel = (data_entrega.replace(year=data_entrega.year + 1)).strftime("%d/%m/%Y")  # Calcula a próxima atualização (1 ano após a entrega)
     else:
-        proxima_atualizacao_aluguel = "N/A"  # Se não houver data de início, define como "N/A"
+        proxima_atualizacao_aluguel = "N/A"  # Se não houver data de entrega, define como "N/A"
 
     # Salvar no banco de dados
-    c.execute("INSERT INTO recibos (nome, imovel, aluguel, condominio, agua, iptu, luz, taxa_incendio, seguro, multa_aluguel, juros_aluguel, multa_encargos, juros_encargos, total, total_extenso, data_emissao, dias_atraso, mes_referencia, ano_referencia, data_vencimento) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-              (nome, imovel, aluguel, condominio, agua, iptu, luz, taxa_incendio, seguro, multa_aluguel, juros_aluguel, multa_encargos, juros_encargos, total, total_extenso, data_emissao, dias_atraso, mes_referencia, ano_referencia, data_vencimento_str))  # Insere o recibo no banco de dados
+    c.execute("INSERT INTO recibos (nome, imovel, aluguel, condominio, agua, iptu, luz, taxa_incendio, seguro, multa_aluguel, juros_aluguel, multa_encargos, juros_encargos, total, total_extenso, data_emissao, dias_atraso, mes_referencia, ano_referencia, data_vencimento, parcela_iptu, parcela_seguro, parcela_taxa_incendio) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+              (nome, imovel, aluguel, condominio, agua, iptu, luz, taxa_incendio, seguro, multa_aluguel, juros_aluguel, multa_encargos, juros_encargos, total, total_extenso, data_emissao, dias_atraso, mes_referencia, ano_referencia, data_vencimento_str, parcela_iptu, parcela_seguro, parcela_taxa_incendio))  # Insere o recibo no banco de dados
     recibo_id = c.lastrowid  # Obtém o ID do último recibo inserido
     conn.commit()  # Salva as alterações no banco de dados
 
@@ -191,16 +201,16 @@ def gerar_recibo():
     pdf.cell(95, 10, text=f"Água: R$ {agua:.2f}", border=1)
     pdf.ln()
     pdf.cell(95, 10, text=f"Juros de mora de X% do Aluguel: R$ {juros_aluguel:.2f}", border=1)
-    pdf.cell(95, 10, text=f"IPTU parcela 06 de 10: R$ {iptu:.2f}", border=1)
+    pdf.cell(95, 10, text=f"IPTU {parcela_iptu}: R$ {iptu:.2f}", border=1)
     pdf.ln()
     pdf.cell(95, 10, text="____________________________", border=1)
     pdf.cell(95, 10, text=f"Luz: R$ {luz:.2f}", border=1)
     pdf.ln()
     pdf.cell(95, 10, text=f"Semi total: R$ {total_aluguel:.2f}", border=1)
-    pdf.cell(95, 10, text=f"Taxa de Incêndio parcela 03 de 05: R$ {taxa_incendio:.2f}", border=1)
+    pdf.cell(95, 10, text=f"Taxa de Incêndio {parcela_taxa_incendio}: R$ {taxa_incendio:.2f}", border=1)
     pdf.ln()
     pdf.cell(95, 10, text="", border=1)
-    pdf.cell(95, 10, text=f"Seguro integral ou parcela 02de 04: R$ {seguro:.2f}", border=1)
+    pdf.cell(95, 10, text=f"Seguro {parcela_seguro}: R$ {seguro:.2f}", border=1)
     pdf.ln()
     pdf.cell(95, 10, text="", border=1)
     pdf.cell(95, 10, text="______________________________", border=1)
@@ -230,13 +240,15 @@ def gerar_recibo():
     pdf.ln()
     pdf.cell(95, 10, text=f"Recibo emitido em: Rio de janeiro, {data_emissao}", border=1)
     pdf.ln()
-    pdf.cell(95, 10, text=f"Próxima atualização do aluguel: {proxima_atualizacao_aluguel}", border=1)  # Adiciona a próxima atualização do aluguel ao PDF
+    pdf.cell(95, 10, text=f"Próxima atualização do aluguel: {proxima_atualizacao_aluguel}", border=1)
     pdf.ln()
-    pdf.cell(95, 10, text=f"Transferiu luz: {'Sim' if transferiu_luz else 'Não'}", border=1)  # Adiciona se o inquilino transferiu a luz ao PDF
+    pdf.cell(95, 10, text=f"Transferiu luz: {'Sim' if transferiu_luz else 'Não'}", border=1)
     pdf.ln()
-    pdf.cell(95, 10, text=f"Data início contrato: {data_inicio_contrato}", border=1)  # Adiciona a data de início do contrato ao PDF
+    pdf.cell(95, 10, text=f"Data início contrato: {data_inicio_contrato}", border=1)
     pdf.ln()
-    pdf.cell(95, 10, text=f"Data fim contrato: {data_fim_contrato}", border=1)  # Adiciona a data de fim do contrato ao PDF
+    pdf.cell(95, 10, text=f"Data fim contrato: {data_fim_contrato}", border=1)
+    pdf.ln()
+    pdf.cell(95, 10, text=f"Data entrega das chaves: {data_entrega_chaves}", border=1)
 
     # Definir nome do arquivo
     nome_arquivo = os.path.join(recibos_dir, f"recibo_{nome}_{data_emissao.replace(':', '-').replace(' ', '_')}.pdf")  # Define o nome do arquivo PDF
@@ -259,7 +271,7 @@ def preencher_campos(event):
     if selecionado:  # Se algum item estiver selecionado
         item = listbox_resultados.get(selecionado[0])  # Obtém o texto do item selecionado
         nome = item.split(", ")[0].split(": ")[1]  # Obtém o nome do inquilino do texto do item
-        c.execute('''SELECT r.*, i.data_inicio_contrato, i.data_fim_contrato, i.transferiu_luz
+        c.execute('''SELECT r.*, i.data_inicio_contrato, i.data_fim_contrato, i.transferiu_luz, i.data_entrega_chaves
                         FROM recibos r
                         JOIN inquilinos i ON r.nome = i.nome
                         WHERE i.nome = ?
@@ -291,11 +303,19 @@ def preencher_campos(event):
             entry_ano_referencia.insert(0, recibo[19])  # Preenche o campo de ano de referência com o ano de referência do recibo
             entry_data_vencimento.delete(0, END)  # Limpa o campo de data de vencimento
             entry_data_vencimento.insert(0, recibo[20])  # Preenche o campo de data de vencimento com a data de vencimento do recibo
+            entry_parcela_iptu.delete(0, END)  # Limpa o campo de parcela do IPTU
+            entry_parcela_iptu.insert(0, recibo[21])  # Preenche o campo de parcela do IPTU com a parcela do IPTU do recibo
+            entry_parcela_seguro.delete(0, END)  # Limpa o campo de parcela do seguro
+            entry_parcela_seguro.insert(0, recibo[22])  # Preenche o campo de parcela do seguro com a parcela do seguro do recibo
+            entry_parcela_taxa_incendio.delete(0, END)  # Limpa o campo de parcela da taxa de incêndio
+            entry_parcela_taxa_incendio.insert(0, recibo[23])  # Preenche o campo de parcela da taxa de incêndio com a parcela da taxa de incêndio do recibo
             entry_data_inicio_contrato.delete(0, END)  # Limpa o campo de data de início do contrato
-            entry_data_inicio_contrato.insert(0, recibo[21])  # Preenche o campo de data de início do contrato com a data de início do contrato do recibo
+            entry_data_inicio_contrato.insert(0, recibo[24])  # Preenche o campo de data de início do contrato com a data de início do contrato do recibo
             entry_data_fim_contrato.delete(0, END)  # Limpa o campo de data de fim do contrato
-            entry_data_fim_contrato.insert(0, recibo[22])  # Preenche o campo de data de fim do contrato com a data de fim do contrato do recibo
-            var_transferiu_luz.set(recibo[23])  # Preenche o checkbox de transferência de luz com o valor do recibo
+            entry_data_fim_contrato.insert(0, recibo[25])  # Preenche o campo de data de fim do contrato com a data de fim do contrato do recibo
+            var_transferiu_luz.set(recibo[26])  # Preenche o checkbox de transferência de luz com o valor do recibo
+            entry_data_entrega_chaves.delete(0, END)  # Limpa o campo de data de entrega das chaves
+            entry_data_entrega_chaves.insert(0, recibo[27])  # Preenche o campo de data de entrega das chaves com a data de entrega das chaves do recibo
 
 # Função para prestação de contas
 def prestacao_contas():
@@ -422,31 +442,47 @@ Label(root, text="Data de Vencimento:").grid(row=14, column=0)
 entry_data_vencimento = Entry(root)
 entry_data_vencimento.grid(row=14, column=1)
 
-Label(root, text="Data Início Contrato:").grid(row=15, column=0)
-entry_data_inicio_contrato = Entry(root)
-entry_data_inicio_contrato.grid(row=15, column=1)
+Label(root, text="Parcela IPTU:").grid(row=15, column=0)
+entry_parcela_iptu = Entry(root)
+entry_parcela_iptu.grid(row=15, column=1)
 
-Label(root, text="Data Fim Contrato:").grid(row=16, column=0)
+Label(root, text="Parcela Seguro:").grid(row=16, column=0)
+entry_parcela_seguro = Entry(root)
+entry_parcela_seguro.grid(row=16, column=1)
+
+Label(root, text="Parcela Taxa de Incêndio:").grid(row=17, column=0)
+entry_parcela_taxa_incendio = Entry(root)
+entry_parcela_taxa_incendio.grid(row=17, column=1)
+
+Label(root, text="Data Entrega das Chaves:").grid(row=18, column=0)
+entry_data_entrega_chaves = Entry(root)
+entry_data_entrega_chaves.grid(row=18, column=1)
+
+Label(root, text="Data Início Contrato:").grid(row=19, column=0)
+entry_data_inicio_contrato = Entry(root)
+entry_data_inicio_contrato.grid(row=19, column=1)
+
+Label(root, text="Data Fim Contrato:").grid(row=20, column=0)
 entry_data_fim_contrato = Entry(root)
-entry_data_fim_contrato.grid(row=16, column=1)
+entry_data_fim_contrato.grid(row=20, column=1)
 
 var_transferiu_luz = IntVar()
-Checkbutton(root, text="Transferiu Luz", variable=var_transferiu_luz).grid(row=17, column=0, columnspan=2)
+Checkbutton(root, text="Transferiu Luz", variable=var_transferiu_luz).grid(row=21, column=0, columnspan=2)
 
-Button(root, text="Cadastrar Inquilino", command=cadastrar_inquilino).grid(row=18, column=0, columnspan=2)
-Button(root, text="Gerar Recibo", command=gerar_recibo).grid(row=19, column=0, columnspan=2)
+Button(root, text="Cadastrar Inquilino", command=cadastrar_inquilino).grid(row=22, column=0, columnspan=2)
+Button(root, text="Gerar Recibo", command=gerar_recibo).grid(row=23, column=0, columnspan=2)
 
 # Busca de inquilinos
-Label(root, text="Buscar Inquilino:").grid(row=20, column=0)
+Label(root, text="Buscar Inquilino:").grid(row=24, column=0)
 entry_busca = Entry(root)
-entry_busca.grid(row=20, column=1)
-Button(root, text="Buscar", command=buscar_inquilinos).grid(row=21, column=0, columnspan=2)
+entry_busca.grid(row=24, column=1)
+Button(root, text="Buscar", command=buscar_inquilinos).grid(row=25, column=0, columnspan=2)
 
 scrollbar_resultados = Scrollbar(root)
-scrollbar_resultados.grid(row=22, column=2, sticky='ns')
+scrollbar_resultados.grid(row=26, column=2, sticky='ns')
 
 listbox_resultados = Listbox(root, yscrollcommand=scrollbar_resultados.set, width=50)
-listbox_resultados.grid(row=22, column=0, columnspan=2)
+listbox_resultados.grid(row=26, column=0, columnspan=2)
 
 scrollbar_resultados.config(command=listbox_resultados.yview)
 
@@ -454,15 +490,15 @@ scrollbar_resultados.config(command=listbox_resultados.yview)
 listbox_resultados.bind("<Double-1>", preencher_campos)
 
 # Prestação de contas
-Label(root, text="ID do Recibo:").grid(row=23, column=0)
+Label(root, text="ID do Recibo:").grid(row=27, column=0)
 entry_recibo_id = Entry(root)
-entry_recibo_id.grid(row=23, column=1)
-Button(root, text="Prestação de Contas", command=prestacao_contas).grid(row=24, column=0, columnspan=2)
+entry_recibo_id.grid(row=27, column=1)
+Button(root, text="Prestação de Contas", command=prestacao_contas).grid(row=28, column=0, columnspan=2)
 
 # Balancete anual
-Label(root, text="Ano do Balancete:").grid(row=25, column=0)
+Label(root, text="Ano do Balancete:").grid(row=29, column=0)
 entry_ano_balancete = Entry(root)
-entry_ano_balancete.grid(row=25, column=1)
-Button(root, text="Gerar Balancete Anual", command=gerar_balancete).grid(row=26, column=0, columnspan=2)
+entry_ano_balancete.grid(row=29, column=1)
+Button(root, text="Gerar Balancete Anual", command=gerar_balancete).grid(row=30, column=0, columnspan=2)
 
 root.mainloop()  # Inicia o loop principal da interface gráfica
