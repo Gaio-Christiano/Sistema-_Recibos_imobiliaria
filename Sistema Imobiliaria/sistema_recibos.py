@@ -3,10 +3,10 @@ import os
 from tkinter import Tk, Label, Entry, Button, messagebox
 from fpdf import FPDF
 from datetime import datetime
+from num2words import num2words
 
 # Função para converter valores numéricos em texto por extenso
 def numero_por_extenso(valor):
-    from num2words import num2words
     return num2words(valor, lang='pt_BR')
 
 # Criar banco de dados
@@ -33,7 +33,8 @@ c.execute('''CREATE TABLE IF NOT EXISTS recibos (
                 juros REAL NOT NULL,
                 total REAL NOT NULL,
                 total_extenso TEXT NOT NULL,
-                data_emissao TEXT NOT NULL
+                data_emissao TEXT NOT NULL,
+                dias_atraso INTEGER NOT NULL
             )''')
 conn.commit()
 
@@ -63,15 +64,24 @@ def gerar_recibo():
     condominio = float(entry_condominio.get())
     agua = float(entry_agua.get())
     iptu = float(entry_iptu.get())
-    multa = aluguel * 0.10  # 10% de multa se houver atraso
-    juros = aluguel * 0.01  # 1% de juros ao mês
-    total = aluguel + condominio + agua + iptu + multa + juros
+    
+    dias_atraso = 5  # Exemplo: 5 dias de atraso
+    
+    # Multa e juros do aluguel
+    multa_aluguel = aluguel * 0.10  # Multa de 10%
+    juros_aluguel = (aluguel * 0.01 / 30) * dias_atraso  # Mora de 1% ao mês proporcional
+    
+    # Multa e juros para contas
+    multa_contas = (condominio + agua + iptu) * 0.02  # 2% de multa
+    juros_contas = (condominio + agua + iptu) * (0.01 / 30) * dias_atraso  # 1% ao mês proporcional
+    
+    total = aluguel + condominio + agua + iptu + multa_aluguel + juros_aluguel + multa_contas + juros_contas
     total_extenso = numero_por_extenso(total)
     data_emissao = datetime.now().strftime("%d-%m-%Y %H:%M:%S")
     
     # Salvar no banco de dados
-    c.execute("INSERT INTO recibos (nome, imovel, aluguel, condominio, agua, iptu, multa, juros, total, total_extenso, data_emissao) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-              (nome, imovel, aluguel, condominio, agua, iptu, multa, juros, total, total_extenso, data_emissao))
+    c.execute("INSERT INTO recibos (nome, imovel, aluguel, condominio, agua, iptu, multa, juros, total, total_extenso, data_emissao, dias_atraso) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+              (nome, imovel, aluguel, condominio, agua, iptu, multa_aluguel + multa_contas, juros_aluguel + juros_contas, total, total_extenso, data_emissao, dias_atraso))
     conn.commit()
     
     # Gerar PDF
@@ -86,11 +96,12 @@ def gerar_recibo():
     pdf.cell(200, 10, text=f"Condomínio: R$ {condominio:.2f}", new_x="LMARGIN", new_y="NEXT")
     pdf.cell(200, 10, text=f"Água: R$ {agua:.2f}", new_x="LMARGIN", new_y="NEXT")
     pdf.cell(200, 10, text=f"IPTU: R$ {iptu:.2f}", new_x="LMARGIN", new_y="NEXT")
-    pdf.cell(200, 10, text=f"Multa: R$ {multa:.2f}", new_x="LMARGIN", new_y="NEXT")
-    pdf.cell(200, 10, text=f"Juros: R$ {juros:.2f}", new_x="LMARGIN", new_y="NEXT")
+    pdf.cell(200, 10, text=f"Multa: R$ {(multa_aluguel + multa_contas):.2f}", new_x="LMARGIN", new_y="NEXT")
+    pdf.cell(200, 10, text=f"Juros: R$ {(juros_aluguel + juros_contas):.2f}", new_x="LMARGIN", new_y="NEXT")
     pdf.cell(200, 10, text=f"Total: R$ {total:.2f}", new_x="LMARGIN", new_y="NEXT")
     pdf.cell(200, 10, text=f"Total por extenso: {total_extenso}", new_x="LMARGIN", new_y="NEXT")
     pdf.cell(200, 10, text=f"Data de Emissão: {data_emissao}", new_x="LMARGIN", new_y="NEXT")
+    pdf.cell(200, 10, text=f"Dias de atraso: {dias_atraso}", new_x="LMARGIN", new_y="NEXT")
     
     # Definir nome do arquivo
     nome_arquivo = f"recibos/recibo_{nome}_{data_emissao.replace(':', '-').replace(' ', '_')}.pdf"
